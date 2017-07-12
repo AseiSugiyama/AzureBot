@@ -32,35 +32,63 @@ server.post('/api/messages', connector.listen());
 // Receive messages from the user and respond by echoing each message back (prefixed with 'You said:')
 var bot = new builder.UniversalBot(connector,
   /* Dialogs */
+  (session) => {
+    session.endDialog(`I'm sorry, I did not understand '${session.message.text}'. Type 'help' to know more about me :)`);
+  }
+);
+
+var luisRecognizer = new builder.LuisRecognizer(process.env.LUIS_MODEL_URL).onEnabled(function (context, callback) {
+  var enabled = context.dialogStack().length === 0;
+  callback(null, enabled);
+});
+bot.recognizer(luisRecognizer);
+
+bot.dialog('SubmitTicket',
+  // Dialogs
   [
+    // 1st
     (session, args, next) => {
-      session.send('Hi! I\'m the help desk bot and I can help you create a ticket.');
-      builder.Prompts.text(session, 'First, please briefly describe your problem to me.');
-    },
-    (session, result, next) => {
-      session.dialogData.description = result.response;
+      var category = builder.EntityRecognizer.findEntity(args.intent.entities, 'category');
+      var severity = builder.EntityRecognizer.findEntity(args.intent.entities, 'severity');
 
-      var choices = ['high', 'normal', 'low'];
+      if (category && category.resolution.values.length > 0) {
+        session.dialogData.category = category.resolution.values[0];
+      }
 
-      // next result.response will return as a object
-      builder.Prompts.choice(
-        session,
-        'which is the severity of this problem?',
-        choices,
-        { listStyle: builder.ListStyle.button }
-      );
-    },
-    (session, result, next) => {
-      session.dialogData.severity = result.response.entity;
+      if (severity && severity.resolution.values.length > 0) {
+        session.dialogData.severity = severity.resolution.values[0];
+      }
 
-      // next result.response will return as a text message.
-      builder.Prompts.text(
-        session,
-        'Which would be the category for this ticket (software, hardware, security or other?)'
-      );
+      session.dialogData.description = session.message.text;
+
+      if (!session.dialogData.severity) {
+        var choices = ['high', 'normal', 'low'];
+        builder.Prompts.choice(session,
+           'which is the severity of this problem?',
+            choices,
+            { listStyle : builder.ListStyle.button }
+          );
+      }else{
+        next();
+      }
     },
+    // 2nd
     (session, result, next) => {
-      session.dialogData.category = result.response;
+      if (!session.dialogData.severity) {
+        session.dialogData.severity = result.response.entity;
+      }
+
+      if (!session.dialogData.category) {
+        builder.Prompts.text(session, 'Which would be the category for this ticket (software, hardware, network, and so on)?');
+      }else{
+        next();
+      }
+    },
+    // 4th
+    (session, result, next) => {
+      if (!session.dialogData.category) {
+        session.dialogData.category = result.response;
+      }
 
       var message = `Great! I'm going to create a "${session.dialogData.severity}" severity ticket in the "${session.dialogData.category}" category. ` +
       `The description I will use is "${session.dialogData.description}". Can you please confirm that this information is correct?`;
@@ -103,7 +131,20 @@ var bot = new builder.UniversalBot(connector,
       }
     }
   ]
-);
+)
+.triggerAction({
+  matches: 'SubmitTicket'
+});
+
+bot.dialog('Help',
+  (session, args, next) => {
+    session.endDialog(`I'm the help desk bot and I can help you create a ticket.\n` +
+                      `You can tell me things like _I need to reset my password_ or _I cannot print_.`);
+  }
+).triggerAction({
+  matches: 'Help'
+});
+
 
 // EOB
 /**
@@ -116,7 +157,7 @@ const createCard = (ticketId, data) => {
   var cardText = fs.readFileSync('./cards/ticket.json', 'UTF-8');
 
   cardText = cardText.replace(/{ticketId}/g, ticketId)
-                    .replace(/{severity}/g, data.serverity)
+                    .replace(/{severity}/g, data.severity)
                     .replace(/{category}/g, data.category)
                     .replace(/{description}/g, data.description);
   return JSON.parse(cardText);
