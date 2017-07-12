@@ -1,0 +1,16 @@
+{
+  "name": "azurebot",
+  "version": "0.0.0",
+  "description": "implementation from the exercises of [help-desk-bot-lab-ja](https://github.com/satonaoki/help-desk-bot-lab-ja)",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ryuichirou",
+  "license": "MIT",
+  "dependencies": {
+    "botbuilder": "^3.8.4",
+    "dotenv": "^4.0.0",
+    "restify": "^4.3.0"
+  }
+}
