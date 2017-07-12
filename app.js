@@ -4,7 +4,7 @@ require('dotenv').config();
 const restify = require('restify');
 const builder = require('botbuilder');
 const ticketsApi = require('./ticketsApi');
-
+const fs = require('fs');
 
 const listenPort = process.env.port || process.env.PORT || 3978;
 const ticketSubmissionUrl = process.env.TICKET_SUBMISSION_URL || `http://localhost:${listenPort}`;
@@ -90,6 +90,10 @@ var bot = new builder.UniversalBot(connector,
 
           }else{
             session.send(`Awesome! Your ticket has been created with the number ${ticketId}.`);
+            session.send(new builder.Message(session).addAttachment({
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: createCard(ticketId, data)
+            }));
           }
         });
 
@@ -100,3 +104,20 @@ var bot = new builder.UniversalBot(connector,
     }
   ]
 );
+
+// EOB
+/**
+  * createCard
+  * @param ticketId : integer
+  * @param data : Object
+  */
+
+const createCard = (ticketId, data) => {
+  var cardText = fs.readFileSync('./cards/ticket.json', 'UTF-8');
+
+  cardText = cardText.replace(/{ticketId}/g, ticketId)
+                    .replace(/{severity}/g, data.serverity)
+                    .replace(/{category}/g, data.category)
+                    .replace(/{description}/g, data.description);
+  return JSON.parse(cardText);
+};
