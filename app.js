@@ -9,7 +9,6 @@ const fs = require('fs');
 const listenPort = process.env.port || process.env.PORT || 3978;
 const ticketSubmissionUrl = process.env.TICKET_SUBMISSION_URL || `http://localhost:${listenPort}`;
 
-
 // Setup Restify Server
 var server = restify.createServer();
 server.listen(listenPort, '::', () => {
@@ -19,6 +18,16 @@ server.listen(listenPort, '::', () => {
 // Setup body parser and tickets api
 server.use(restify.bodyParser());
 server.post('/api/tickets', ticketsApi);
+
+// Azure Search API Client
+const azureSearch = require('./azureSearchApiClient');
+
+const azureSearchQuery = azureSearch({
+    searchName: process.env.AZURE_SEARCH_ACCOUNT,
+    indexName: process.env.AZURE_SEARCH_INDEX,
+    searchKey: process.env.AZURE_SEARCH_KEY
+});
+
 
 // Create chat connector for communicating with the Bot Framework Service
 var connector = new builder.ChatConnector({
@@ -135,6 +144,33 @@ bot.dialog('SubmitTicket',
 .triggerAction({
   matches: 'SubmitTicket'
 });
+
+bot.dialog('ExploreKnowledgeBase', [
+  (session, args) => {
+    var category = builder.EntityRecognizer.findEntity(args.intent.entities, 'category');
+
+    if (!category) {
+      return session.endDialog('Try typing something like _explore hardware_.');
+    }
+
+    //search by category
+    azureSearchQuery('fileter=' + encodeURIComponent(`category eq ${category.entity}`), (error, result) => {
+      if (error) {
+        console.log(error);
+        session.endDialog('Ooops! Something went wrong while contacting Azure Search. Please try again later.');
+      } else {
+        var msg = `These are some articles I\'ve found in the knowledge base for the _'${category.entity}'_ category:`;
+        result.value.forEach( (article) => {
+          msg += `\n * ${article.title}`;
+        });
+        session.endDialog(msg);
+      }
+    }); 
+  }
+]).triggerAction({
+  matches:'ExploreKnowledgeBase'
+});
+
 
 bot.dialog('Help',
   (session, args, next) => {
